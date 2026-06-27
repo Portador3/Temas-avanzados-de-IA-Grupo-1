@@ -369,11 +369,11 @@ tensorboard_agg: true
 tensorboard_each_run: false
 train:
   add_ego_id: true
-  auto_resume: false
+  auto_resume: true
   batch_size: 2048
   ckpt_best: false
   ckpt_clean: true
-  ckpt_period: 5
+  ckpt_period: 2
   enable_ckpt: true
   epoch_resume: -1
   eval_period: 4
