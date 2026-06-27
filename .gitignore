@@ -2,5 +2,6 @@
 analysis.ipynb
 figure.png
 data/
+*.zip
 __pycache__/
 *.pyc

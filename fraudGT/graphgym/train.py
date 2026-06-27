@@ -1,4 +1,6 @@
 import logging
+import os
+import subprocess
 import time
 
 import torch
@@ -7,6 +9,24 @@ from fraudGT.graphgym.checkpoint import clean_ckpt, load_ckpt, save_ckpt
 from fraudGT.graphgym.config import cfg
 from fraudGT.graphgym.loss import compute_loss
 from fraudGT.graphgym.utils.epoch import is_ckpt_epoch, is_eval_epoch
+
+
+def _git_push_ckpt(ckpt_path: str):
+    gh_user = os.environ.get('GH_USER', '')
+    gh_token = os.environ.get('GH_TOKEN', '')
+    rama = os.environ.get('RAMA', '')
+    if not (gh_user and gh_token and rama):
+        return
+    try:
+        remote = f'https://{gh_user}:{gh_token}@github.com/{gh_user}/Temas-avanzados-de-IA-Grupo-1.git'
+        subprocess.run(['git', 'add', ckpt_path], check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', f'ckpt: {os.path.basename(ckpt_path)}'],
+                       check=True, capture_output=True)
+        subprocess.run(['git', 'push', remote, f'HEAD:{rama}'],
+                       check=True, capture_output=True)
+        logging.info(f'Checkpoint pushed to {rama}: {ckpt_path}')
+    except subprocess.CalledProcessError as e:
+        logging.warning(f'Git push failed: {e.stderr.decode().strip()}')
 
 
 def train_epoch(logger, loader, model, optimizer, scheduler):
@@ -80,6 +100,7 @@ def train(loggers, loaders, model, optimizer, scheduler):
                 loggers[i].write_epoch(cur_epoch)
         if is_ckpt_epoch(cur_epoch):
             save_ckpt(model, optimizer, scheduler, cur_epoch)
+            _git_push_ckpt(os.path.join(cfg.run_dir, 'ckpt', f'{cur_epoch}.ckpt'))
     for logger in loggers:
         logger.close()
     if cfg.train.ckpt_clean:
