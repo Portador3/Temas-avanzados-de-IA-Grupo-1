@@ -33,7 +33,7 @@ def format_dataset(inPath):
     '''
     outPath = os.path.dirname(inPath) + "/formatted_transactions.csv"
 
-    raw = dt.fread(inPath, columns = dt.str32)
+    raw = dt.fread(inPath, columns = dt.str32, fill=True)
 
     currency = dict()
     paymentFormat = dict()
