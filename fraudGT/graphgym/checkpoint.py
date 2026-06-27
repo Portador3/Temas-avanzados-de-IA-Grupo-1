@@ -64,6 +64,22 @@ def clean_ckpt():
         os.remove(get_ckpt_path(epoch))
 
 
+def save_ckpt_to(
+    model: torch.nn.Module,
+    optimizer: Optional[torch.optim.Optimizer] = None,
+    scheduler: Optional[Any] = None,
+    path: str = '',
+):
+    r"""Saves the model checkpoint to an explicit path."""
+    ckpt: Dict[str, Any] = {MODEL_STATE: model.state_dict()}
+    if optimizer is not None:
+        ckpt[OPTIMIZER_STATE] = optimizer.state_dict()
+    if scheduler is not None:
+        ckpt[SCHEDULER_STATE] = scheduler.state_dict()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save(ckpt, path)
+
+
 ###############################################################################
 
 

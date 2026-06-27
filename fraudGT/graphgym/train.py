@@ -6,13 +6,16 @@ import time
 
 import torch
 
-from fraudGT.graphgym.checkpoint import clean_ckpt, load_ckpt, save_ckpt
+from fraudGT.graphgym.checkpoint import clean_ckpt, load_ckpt, save_ckpt, save_ckpt_to
 from fraudGT.graphgym.config import cfg
 from fraudGT.graphgym.loss import compute_loss
 from fraudGT.graphgym.utils.epoch import is_ckpt_epoch, is_eval_epoch
 
 
-def _git_push_ckpt(ckpt_path: str):
+_git_lock = threading.Lock()
+
+
+def _git_push_ckpt(new_path: str, old_path: str = None):
     gh_user = os.environ.get('GH_USER', '')
     gh_token = os.environ.get('GH_TOKEN', '')
     rama = os.environ.get('RAMA', '')
@@ -20,16 +23,20 @@ def _git_push_ckpt(ckpt_path: str):
         return
 
     def _push():
-        try:
-            remote = f'https://{gh_user}:{gh_token}@github.com/{gh_user}/Temas-avanzados-de-IA-Grupo-1.git'
-            subprocess.run(['git', 'add', ckpt_path], check=True, capture_output=True)
-            subprocess.run(['git', 'commit', '-m', f'ckpt: {os.path.basename(ckpt_path)}'],
-                           check=True, capture_output=True)
-            subprocess.run(['git', 'push', remote, f'HEAD:{rama}'],
-                           check=True, capture_output=True)
-            logging.info(f'Checkpoint pushed to {rama}: {ckpt_path}')
-        except subprocess.CalledProcessError as e:
-            logging.warning(f'Git push failed: {e.stderr.decode().strip()}')
+        with _git_lock:
+            try:
+                remote = f'https://{gh_user}:{gh_token}@github.com/{gh_user}/Temas-avanzados-de-IA-Grupo-1.git'
+                if old_path and old_path != new_path:
+                    subprocess.run(['git', 'rm', '--cached', '-f', old_path],
+                                   check=False, capture_output=True)
+                subprocess.run(['git', 'add', new_path], check=True, capture_output=True)
+                subprocess.run(['git', 'commit', '-m', f'ckpt: {os.path.basename(new_path)}'],
+                               check=True, capture_output=True)
+                subprocess.run(['git', 'push', remote, f'HEAD:{rama}'],
+                               check=True, capture_output=True)
+                logging.info(f'Checkpoint pushed to {rama}: {new_path}')
+            except subprocess.CalledProcessError as e:
+                logging.warning(f'Git push failed: {e.stderr.decode().strip()}')
 
     threading.Thread(target=_push, daemon=True).start()
 
@@ -104,6 +111,8 @@ def train(loggers, loaders, model, optimizer, scheduler):
     patience = max(10, cfg.optim.max_epoch // 10)
     best_val_auc = -1.0
     epochs_no_improve = 0
+    last_ckpt_path = None
+    best_ckpt_path = None
 
     num_splits = len(loggers)
     split_names = ['val', 'test']
@@ -123,6 +132,10 @@ def train(loggers, loaders, model, optimizer, scheduler):
                 if val_auc > best_val_auc:
                     best_val_auc = val_auc
                     epochs_no_improve = 0
+                    new_best_path = os.path.join(cfg.run_dir, 'ckpt', 'best.ckpt')
+                    save_ckpt_to(model, optimizer, scheduler, new_best_path)
+                    _git_push_ckpt(new_best_path, best_ckpt_path)
+                    best_ckpt_path = new_best_path
                 else:
                     epochs_no_improve += 1
                 if epochs_no_improve >= patience:
@@ -134,7 +147,9 @@ def train(loggers, loaders, model, optimizer, scheduler):
                     break
         if is_ckpt_epoch(cur_epoch):
             save_ckpt(model, optimizer, scheduler, cur_epoch)
-            _git_push_ckpt(os.path.join(cfg.run_dir, 'ckpt', f'{cur_epoch}.ckpt'))
+            new_ckpt_path = os.path.join(cfg.run_dir, 'ckpt', f'{cur_epoch}.ckpt')
+            _git_push_ckpt(new_ckpt_path, last_ckpt_path)
+            last_ckpt_path = new_ckpt_path
     for logger in loggers:
         logger.close()
     if cfg.train.ckpt_clean:
