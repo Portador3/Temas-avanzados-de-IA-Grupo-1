@@ -34,9 +34,13 @@ def _git_push_ckpt(new_path: str, old_path: str = None):
                                check=True, capture_output=True)
                 subprocess.run(['git', 'push', remote, f'HEAD:{rama}'],
                                check=True, capture_output=True)
-                logging.info(f'Checkpoint pushed to {rama}: {new_path}')
+                msg = f'[Git push] OK: {os.path.basename(new_path)} -> {rama}'
+                print(msg, flush=True)
+                logging.info(msg)
             except subprocess.CalledProcessError as e:
-                logging.warning(f'Git push failed: {e.stderr.decode().strip()}')
+                msg = f'[Git push] FAILED: {os.path.basename(new_path)} — {e.stderr.decode().strip()}'
+                print(msg, flush=True)
+                logging.warning(msg)
 
     threading.Thread(target=_push, daemon=True).start()
 
@@ -104,9 +108,12 @@ def train(loggers, loaders, model, optimizer, scheduler):
     gh_token = os.environ.get('GH_TOKEN', '')
     rama = os.environ.get('RAMA', '')
     if gh_user and gh_token and rama:
-        logging.info(f'[Git push] Enabled — user={gh_user}, branch={rama}')
+        msg = f'[Git push] Enabled — user={gh_user}, branch={rama}'
     else:
-        logging.warning('[Git push] Disabled — GH_USER, GH_TOKEN or RAMA not set')
+        missing = [v for v, k in [('GH_USER', gh_user), ('GH_TOKEN', gh_token), ('RAMA', rama)] if not k]
+        msg = f'[Git push] Disabled — faltan variables: {", ".join(missing)}'
+    print(msg, flush=True)
+    logging.info(msg)
 
     patience = max(10, cfg.optim.max_epoch // 10)
     best_val_auc = -1.0
