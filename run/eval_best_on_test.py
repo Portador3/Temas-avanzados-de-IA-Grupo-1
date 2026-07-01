@@ -14,8 +14,10 @@ Pass the same `out_dir` / `dataset.dir` overrides you used when training, via
 trailing `key value` pairs, exactly like `python -m fraudGT.main --cfg ...`.
 
 Side effect: like every eval pass in this codebase, it appends one line to
-`<run_dir>/test/stats.json` (tagged with epoch=-1 so it's easy to tell apart
-from real training epochs). No checkpoint or training file is touched.
+`<run_dir>/test/stats.json` (tagged with epoch=0, since this logger has no
+real epoch of its own -- check the printed metrics below rather than assuming
+that file's rows are all real training epochs). No checkpoint or training
+file is touched.
 
 Usage:
     python run/eval_best_on_test.py \
@@ -98,9 +100,13 @@ def main():
     loggers = create_logger()
     test_loader = loaders[-1]  # create_loader always returns [train, val, test]
     eval_epoch(loggers[-1], test_loader, model, split='test')
-    test_stats = loggers[-1].write_epoch(-1)
+    # write_epoch() unconditionally computes eta() even for non-train
+    # loggers (it's just not included in the returned stats), and eta()
+    # divides by `epoch + 1` -- so epoch=-1 triggers a ZeroDivisionError.
+    # The value has no effect on the actual metrics for a 'test' logger.
+    test_stats = loggers[-1].write_epoch(0)
 
-    print('\nReal test metrics for this checkpoint:')
+    print('\nReal test metrics for this checkpoint (best.ckpt):')
     for k, v in test_stats.items():
         print(f'  {k}: {v}')
 
